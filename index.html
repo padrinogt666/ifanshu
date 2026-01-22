@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>打番薯小游戏</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            text-align: center;
+            background-color: #f0e68c;
+            margin: 0;
+            padding: 20px;
+            user-select: none;
+            overflow-x: hidden;
+        }
+
+        h1 {
+            color: #8b4513;
+            margin-bottom: 5px;
+        }
+        
+        .instructions {
+            color: #5c3317;
+            font-size: 0.9rem;
+            margin-bottom: 15px;
+            background: rgba(255,255,255,0.5);
+            padding: 5px;
+            border-radius: 5px;
+            display: inline-block;
+        }
+
+        .header {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            color: #5c3317;
+            font-weight: bold;
+        }
+
+        .game-board {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            width: 100%;
+            max-width: 500px;
+            aspect-ratio: 1 / 1;
+            margin: 0 auto;
+        }
+
+        .hole {
+            position: relative;
+            overflow: hidden;
+            border-radius: 50%;
+            background-color: #deb887;
+            box-shadow: inset 0 10px 0 0 #5c3317, inset 0 -10px 0 0 #a0522d;
+            cursor: pointer;
+            /* 简单的锤子光标效果，如果图片失效会回退到普通指针 */
+            cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewport="0 0 100 100" style="fill:brown;font-size:30px;"><text y="50%">🔨</text></svg>') 16 0, auto; 
+        }
+
+        /* 番薯容器 */
+        .potato-container {
+            width: 80%;
+            height: 80%;
+            position: absolute;
+            left: 10%;
+            top: 100%; /* 初始位置在洞下面 */
+            transition: top 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            
+            /* 自动裁剪成圆形 */
+            border-radius: 50%;
+            overflow: hidden; 
+            border: 3px solid #8b4513;
+            background-color: #fff;
+            box-shadow: 0 4px 5px rgba(0,0,0,0.3);
+        }
+
+        /* 图片样式 */
+        .potato-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover; /* 确保图片填满圆形且不变形 */
+            pointer-events: none;
+            display: block;
+        }
+
+        /* 痛苦表情覆盖层 */
+        .pain-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(255, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2rem;
+            opacity: 0;
+            transition: opacity 0.1s;
+        }
+
+        /* 状态控制 */
+        .hole.up .potato-container {
+            top: 10%; /* 冒出来 */
+        }
+
+        /* 打中后的状态 */
+        .hole.hit .potato-container {
+            transform: scale(0.95);
+        }
+
+        .hole.hit .pain-overlay {
+            opacity: 1; /* 显示痛苦遮罩 */
+        }
+        
+        .hole.hit .potato-img {
+            filter: grayscale(100%) contrast(120%); /* 打中后变黑白 */
+        }
+
+        /* 按钮区 */
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        #start-button {
+            font-size: 1.5rem;
+            padding: 12px 40px;
+            cursor: pointer;
+            background-color: #8b4513;
+            color: white;
+            border: none;
+            border-radius: 50px;
+            box-shadow: 0 4px #5c3317;
+            transition: all 0.1s;
+        }
+
+        #start-button:active {
+            transform: translateY(4px);
+            box-shadow: 0 0 #5c3317;
+        }
+        
+        #start-button:disabled {
+            background-color: #ccc;
+            transform: translateY(2px);
+            box-shadow: none;
+        }
+
+        .file-upload {
+            position: relative;
+            display: inline-block;
+            margin-bottom: 10px;
+        }
+
+        .file-upload input[type="file"] {
+            display: none;
+        }
+
+        .custom-file-upload {
+            border: 2px dashed #8b4513;
+            display: inline-block;
+            padding: 6px 12px;
+            cursor: pointer;
+            border-radius: 5px;
+            background-color: rgba(255,255,255,0.5);
+            color: #5c3317;
+            font-size: 0.9rem;
+        }
+
+        /* 游戏结束弹窗 */
+        #game-over-message {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7);
+            z-index: 100;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            border: 4px solid #8b4513;
+            animation: dropIn 0.4s;
+        }
+        
+        @keyframes dropIn {
+            from { transform: translateY(-100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+    </style>
+</head>
+<body>
+
+    <h1>暴打番薯</h1>
+    <div class="instructions">如果图片未显示，请确保你的图片名为 potato.jpg 并放在同一文件夹</div>
+
+    <div class="header">
+        <div>得分: <span id="score" style="color: #d2691e;">0</span></div>
+        <div>时间: <span id="time-left">30</span>s</div>
+    </div>
+
+    <div class="game-board">
+        <!-- 9个坑位，图片统一引用 potato.jpg -->
+        <div class="hole" onclick="bonk(this)"><div class="potato-container"><img src="potato.jpg" class="potato-img" alt="番薯"><div class="pain-overlay">😭</div></div></div>
+        <div class="hole" onclick="bonk(this)"><div class="potato-container"><img src="potato.jpg" class="potato-img" alt="番薯"><div class="pain-overlay">😵</div></div></div>
+        <div class="hole" onclick="bonk(this)"><div class="potato-container"><img src="potato.jpg" class="potato-img" alt="番薯"><div class="pain-overlay">🤕</div></div></div>
+        <div class="hole" onclick="bonk(this)"><div class="potato-container"><img src="potato.jpg" class="potato-img" alt="番薯"><div class="pain-overlay">😫</div></div></div>
+        <div class="hole" onclick="bonk(this)"><div class="potato-container"><img src="potato.jpg" class="potato-img" alt="番薯"><div class="pain-overlay">😖</div></div></div>
+        <div class="hole" onclick="bonk(this)"><div class="potato-container"><img src="potato.jpg" class="potato-img" alt="番薯"><div class="pain-overlay">💢</div></div></div>
+        <div class="hole" onclick="bonk(this)"><div class="potato-container"><img src="potato.jpg" class="potato-img" alt="番薯"><div class="pain-overlay">😱</div></div></div>
+        <div class="hole" onclick="bonk(this)"><div class="potato-container"><img src="potato.jpg" class="potato-img" alt="番薯"><div class="pain-overlay">🥴</div></div></div>
+        <div class="hole" onclick="bonk(this)"><div class="potato-container"><img src="potato.jpg" class="potato-img" alt="番薯"><div class="pain-overlay">💥</div></div></div>
+    </div>
+
+    <div class="controls">
+        <!-- 保留了手动上传功能，方便你本地测试 -->
+        <label class="file-upload">
+            <span class="custom-file-upload">🖼️ 临时换图 (本地测试用)</span>
+            <input type="file" id="image-upload" accept="image/*">
+        </label>
+        <button id="start-button" onclick="startGame()">开始游戏</button>
+    </div>
+    
+    <div id="game-over-message">
+        <div class="modal-content">
+            <h2>游戏结束!</h2>
+            <p>你一共打了番薯 <span id="final-score" style="font-size: 2em; color: #d2691e; font-weight: bold;">0</span> 次</p>
+            <button onclick="closeGameOver()" style="background:#8b4513; color:white; border:none; padding:10px 20px; border-radius:5px; cursor:pointer;">再打一次</button>
+        </div>
+    </div>
+
+    <script>
+        const holes = document.querySelectorAll('.hole');
+        const scoreBoard = document.getElementById('score');
+        const timeLeftDisplay = document.getElementById('time-left');
+        const startBtn = document.getElementById('start-button');
+        const imageInput = document.getElementById('image-upload');
+        const potatoImages = document.querySelectorAll('.potato-img');
+
+        let lastHole;
+        let timeUp = false;
+        let score = 0;
+        let timeLeft = 30;
+        let gameTimer;
+        let peepTimer;
+        let isPlaying = false;
+
+        // 如果用户在本地想临时换别的图测试
+        imageInput.addEventListener('change', function(e) {
+            if (e.target.files && e.target.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    potatoImages.forEach(img => {
+                        img.src = e.target.result;
+                    });
+                };
+                reader.readAsDataURL(e.target.files[0]);
+            }
+        });
+
+        function randomTime(min, max) {
+            return Math.round(Math.random() * (max - min) + min);
+        }
+
+        function randomHole(holes) {
+            const idx = Math.floor(Math.random() * holes.length);
+            const hole = holes[idx];
+            if (hole === lastHole) {
+                return randomHole(holes);
+            }
+            lastHole = hole;
+            return hole;
+        }
+
+        function peep() {
+            const time = randomTime(500, 1000);
+            const hole = randomHole(holes);
+            hole.classList.add('up');
+            
+            hole.classList.remove('hit');
+
+            peepTimer = setTimeout(() => {
+                hole.classList.remove('up');
+                if (!timeUp) peep();
+            }, time);
+        }
+
+        function startGame() {
+            if (isPlaying) return;
+            isPlaying = true;
+            
+            scoreBoard.textContent = 0;
+            score = 0;
+            timeLeft = 30;
+            timeLeftDisplay.textContent = timeLeft;
+            timeUp = false;
+            
+            startBtn.disabled = true;
+            startBtn.textContent = "痛击中...";
+            document.getElementById('game-over-message').style.display = 'none';
+
+            holes.forEach(hole => {
+                hole.classList.remove('up');
+                hole.classList.remove('hit');
+            });
+
+            peep();
+            
+            gameTimer = setInterval(() => {
+                timeLeft--;
+                timeLeftDisplay.textContent = timeLeft;
+                if (timeLeft <= 0) {
+                    clearInterval(gameTimer);
+                    timeUp = true;
+                    isPlaying = false;
+                    startBtn.disabled = false;
+                    startBtn.textContent = "开始游戏";
+                    showGameOver();
+                }
+            }, 1000);
+        }
+
+        function bonk(hole) {
+            if (!isPlaying) return;
+            
+            if (hole.classList.contains('up') && !hole.classList.contains('hit')) {
+                score++;
+                hole.classList.add('hit');
+                scoreBoard.textContent = score;
+                
+                if (navigator.vibrate) navigator.vibrate(50);
+
+                setTimeout(() => {
+                    hole.classList.remove('up');
+                }, 300); 
+            }
+        }
+        
+        function showGameOver() {
+            document.getElementById('final-score').textContent = score;
+            document.getElementById('game-over-message').style.display = 'flex';
+        }
+
+        function closeGameOver() {
+            document.getElementById('game-over-message').style.display = 'none';
+        }
+        
+        // 触摸支持
+        holes.forEach(hole => {
+            hole.addEventListener('touchstart', function(e) {
+                e.preventDefault(); 
+                bonk(this);
+            });
+        });
+    </script>
+</body>
+</html>
